@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
- extern "C" {
-    #include "include/android/fec.h"
+extern "C" {
+    #include <fec.h>
 }
 
 #undef NDEBUG
@@ -28,8 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <android/file.h>  //#include <android-base/file.h>
-#include <image.h>
+#include <android-base/file.h>
+#include "image.h"
 
 enum {
     MODE_ENCODE,
@@ -170,101 +170,100 @@ static int get_start(int mode, const std::string& filename)
 }
 
 static int encode(image& ctx, const std::vector<std::string>& inp_filenames,
-    const std::string& fec_filename)
+        const std::string& fec_filename)
 {
-if (ctx.inplace) {
-    FATAL("invalid parameters: inplace can only used when decoding\n");
+    if (ctx.inplace) {
+        FATAL("invalid parameters: inplace can only used when decoding\n");
+    }
+
+    if (!image_load(inp_filenames, &ctx)) {
+        FATAL("failed to read input\n");
+    }
+
+    if (!image_ecc_new(fec_filename, &ctx)) {
+        FATAL("failed to allocate ecc\n");
+    }
+
+    INFO("encoding RS(255, %d) to '%s' for input files:\n", ctx.rs_n,
+        fec_filename.c_str());
+
+    size_t n = 1;
+
+    for (const auto& fn : inp_filenames) {
+        INFO("\t%zu: '%s'\n", n++, fn.c_str());
+    }
+
+    if (ctx.verbose) {
+        INFO("\traw fec size: %u\n", ctx.fec_size);
+        INFO("\tblocks: %" PRIu64 "\n", ctx.blocks);
+        INFO("\trounds: %" PRIu64 "\n", ctx.rounds);
+    }
+
+    if (!image_process(encode_rs, &ctx)) {
+        FATAL("failed to process input\n");
+    }
+
+    if (!image_ecc_save(&ctx)) {
+        FATAL("failed to write output\n");
+    }
+
+    image_free(&ctx);
+    return 0;
 }
-
-if (!image_load(inp_filenames, &ctx)) {
-    FATAL("failed to read input\n");
-}
-
-if (!image_ecc_new(fec_filename, &ctx)) {
-    FATAL("failed to allocate ecc\n");
-}
-
-INFO("encoding RS(255, %d) to '%s' for input files:\n", ctx.rs_n,
-    fec_filename.c_str());
-
-size_t n = 1;
-
-for (const auto& fn : inp_filenames) {
-    INFO("\t%zu: '%s'\n", n++, fn.c_str());
-}
-
-if (ctx.verbose) {
-    INFO("\traw fec size: %u\n", ctx.fec_size);
-    INFO("\tblocks: %" PRIu64 "\n", ctx.blocks);
-    INFO("\trounds: %" PRIu64 "\n", ctx.rounds);
-}
-
-if (!image_process(encode_rs, &ctx)) {
-    FATAL("failed to process input\n");
-}
-
-if (!image_ecc_save(&ctx)) {
-    FATAL("failed to write output\n");
-}
-
-image_free(&ctx);
-return 0;
-}
-
 
 static int decode(image& ctx, const std::vector<std::string>& inp_filenames,
-    const std::string& fec_filename, std::string& out_filename)
+        const std::string& fec_filename, std::string& out_filename)
 {
-const std::string& inp_filename = inp_filenames.front();
+    const std::string& inp_filename = inp_filenames.front();
 
-if (ctx.inplace && ctx.sparse) {
-    FATAL("invalid parameters: inplace cannot be used with sparse "
-        "files\n");
-}
+    if (ctx.inplace && ctx.sparse) {
+        FATAL("invalid parameters: inplace cannot be used with sparse "
+            "files\n");
+    }
 
-if (ctx.padding) {
-    FATAL("invalid parameters: padding is only relevant when encoding\n");
-}
+    if (ctx.padding) {
+        FATAL("invalid parameters: padding is only relevant when encoding\n");
+    }
 
-if (!image_ecc_load(fec_filename, &ctx) ||
-        !image_load(inp_filenames, &ctx)) {
-    FATAL("failed to read input\n");
-}
+    if (!image_ecc_load(fec_filename, &ctx) ||
+            !image_load(inp_filenames, &ctx)) {
+        FATAL("failed to read input\n");
+    }
 
-if (ctx.inplace) {
-    INFO("correcting '%s' using RS(255, %d) from '%s'\n",
-        inp_filename.c_str(), ctx.rs_n, fec_filename.c_str());
+    if (ctx.inplace) {
+        INFO("correcting '%s' using RS(255, %d) from '%s'\n",
+            inp_filename.c_str(), ctx.rs_n, fec_filename.c_str());
 
-    out_filename = inp_filename;
-} else {
-    INFO("decoding '%s' to '%s' using RS(255, %d) from '%s'\n",
-        inp_filename.c_str(),
-        out_filename.empty() ? out_filename.c_str() : "<none>", ctx.rs_n,
-        fec_filename.c_str());
-}
+        out_filename = inp_filename;
+    } else {
+        INFO("decoding '%s' to '%s' using RS(255, %d) from '%s'\n",
+            inp_filename.c_str(),
+            out_filename.empty() ? out_filename.c_str() : "<none>", ctx.rs_n,
+            fec_filename.c_str());
+    }
 
-if (ctx.verbose) {
-    INFO("\traw fec size: %u\n", ctx.fec_size);
-    INFO("\tblocks: %" PRIu64 "\n", ctx.blocks);
-    INFO("\trounds: %" PRIu64 "\n", ctx.rounds);
-}
+    if (ctx.verbose) {
+        INFO("\traw fec size: %u\n", ctx.fec_size);
+        INFO("\tblocks: %" PRIu64 "\n", ctx.blocks);
+        INFO("\trounds: %" PRIu64 "\n", ctx.rounds);
+    }
 
-if (!image_process(decode_rs, &ctx)) {
-    FATAL("failed to process input\n");
-}
+    if (!image_process(decode_rs, &ctx)) {
+        FATAL("failed to process input\n");
+    }
 
-if (ctx.rv) {
-    INFO("corrected %" PRIu64 " errors\n", ctx.rv);
-} else {
-    INFO("no errors found\n");
-}
+    if (ctx.rv) {
+        INFO("corrected %" PRIu64 " errors\n", ctx.rv);
+    } else {
+        INFO("no errors found\n");
+    }
 
-if (!out_filename.empty() && !image_save(out_filename, &ctx)) {
-    FATAL("failed to write output\n");
-}
+    if (!out_filename.empty() && !image_save(out_filename, &ctx)) {
+        FATAL("failed to write output\n");
+    }
 
-image_free(&ctx);
-return 0;
+    image_free(&ctx);
+    return 0;
 }
 
 int main(int argc, char **argv)

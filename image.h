@@ -17,11 +17,11 @@
 #ifndef __FEC_H__
 #define __FEC_H__
 
-#include <android/Compat.h>
+#include <utils/Compat.h>
 #include <string>
 #include <vector>
-#include <android/fec/io.h>
-#include <android/fec/ecc.h>
+#include <fec/io.h>
+#include <fec/ecc.h>
 
 #define IMAGE_MIN_THREADS     1
 #define IMAGE_MAX_THREADS     128
